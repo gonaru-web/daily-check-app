@@ -17,7 +17,42 @@ const defaultDayData = () => ({
   tomorrow: ["", "", ""],
   gratitude: Array.from({ length: 10 }, () => ""),
   memo: "",
+  migratedFromYesterday: false,
 });
+
+const getYesterday = (dateString) => {
+  const d = new Date(dateString);
+  d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const mergeTomorrowToTasks = (todayData, yesterdayData) => {
+  const baseToday = todayData || defaultDayData();
+  const carryItems = (yesterdayData?.tomorrow || [])
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (carryItems.length === 0) return baseToday;
+
+  const tasks = [...baseToday.tasks];
+  let carryIndex = 0;
+
+  for (let i = 0; i < tasks.length && carryIndex < carryItems.length; i++) {
+    if (!tasks[i].text.trim()) {
+      tasks[i] = { text: carryItems[carryIndex], done: false };
+      carryIndex += 1;
+    }
+  }
+
+  return {
+    ...baseToday,
+    tasks,
+    migratedFromYesterday: true,
+  };
+};
 
 export default function App() {
   const [today, setToday] = useState(getToday());
@@ -70,6 +105,28 @@ export default function App() {
 
     return () => clearTimeout(timer);
   }, [history, loading]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    setHistory((prev) => {
+      const current = prev[today];
+      if (current?.migratedFromYesterday) return prev;
+
+      const yesterday = prev[getYesterday(today)];
+      const updatedToday = mergeTomorrowToTasks(current, yesterday);
+
+      const currentJson = JSON.stringify(current || defaultDayData());
+      const updatedJson = JSON.stringify(updatedToday);
+
+      if (currentJson === updatedJson) return prev;
+
+      return {
+        ...prev,
+        [today]: updatedToday,
+      };
+    });
+  }, [today, loading]);
 
   const dayData = history[today] || defaultDayData();
 
