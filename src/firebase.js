@@ -2,12 +2,13 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "여기에_진짜_apiKey",
-  authDomain: "여기에_진짜_authDomain",
-  projectId: "여기에_진짜_projectId",
-  storageBucket: "여기에_진짜_storageBucket",
-  messagingSenderId: "여기에_진짜_messagingSenderId",
-  appId: "여기에_진짜_appId",
+  apiKey: "AIzaSyBDgun4u92y2D9xjan7ya4vTfEovjy9CXE",
+  authDomain: "daily-check-799a4.firebaseapp.com",
+  projectId: "daily-check-799a4",
+  storageBucket: "daily-check-799a4.firebasestorage.app",
+  messagingSenderId: "496567511020",
+  appId: "1:496567511020:web:17bde98f1e828dc9f4c2c9",
+  measurementId: "G-0NHE4EYJ1C"
 };
 
 const app = initializeApp(firebaseConfig);
