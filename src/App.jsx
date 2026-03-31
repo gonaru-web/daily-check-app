@@ -1,4 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { db } from "./firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+
+const USER_ID = "default-user";
 
 const getToday = () => {
   const d = new Date();
@@ -18,21 +22,54 @@ const defaultDayData = () => ({
 export default function App() {
   const [today, setToday] = useState(getToday());
   const [history, setHistory] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saveMessage, setSaveMessage] = useState("불러오는 중...");
 
   useEffect(() => {
-    const saved = localStorage.getItem("daily-check-history");
-    if (saved) {
+    const loadData = async () => {
       try {
-        setHistory(JSON.parse(saved));
-      } catch {
-        setHistory({});
+        const ref = doc(db, "dailyCheckUsers", USER_ID);
+        const snapshot = await getDoc(ref);
+
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          setHistory(data.history || {});
+        } else {
+          setHistory({});
+        }
+
+        setSaveMessage("불러오기 완료");
+      } catch (error) {
+        console.error("불러오기 오류:", error);
+        setSaveMessage("불러오기 실패");
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+
+    loadData();
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("daily-check-history", JSON.stringify(history));
-  }, [history]);
+    if (loading) return;
+
+    const saveData = async () => {
+      try {
+        const ref = doc(db, "dailyCheckUsers", USER_ID);
+        await setDoc(ref, { history }, { merge: true });
+        setSaveMessage("자동 저장됨");
+      } catch (error) {
+        console.error("저장 오류:", error);
+        setSaveMessage("저장 실패");
+      }
+    };
+
+    const timer = setTimeout(() => {
+      saveData();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [history, loading]);
 
   const dayData = history[today] || defaultDayData();
 
@@ -94,6 +131,17 @@ export default function App() {
     background: "#fff",
   };
 
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f5f5" }}>
+        <div style={{ ...cardStyle, maxWidth: "420px", textAlign: "center" }}>
+          <h2 style={{ marginTop: 0 }}>데이터 불러오는 중</h2>
+          <p style={{ marginBottom: 0, color: "#666" }}>잠시만 기다려 주세요.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#f5f5f5", padding: "16px" }}>
       <div style={{ maxWidth: "720px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -103,6 +151,9 @@ export default function App() {
               <h1 style={{ margin: 0, fontSize: "28px" }}>나의 데일리 체크 앱</h1>
               <p style={{ margin: "8px 0 0", color: "#666", fontSize: "14px" }}>
                 복잡한 시간표 말고, 오늘 했는지 체크만 하자.
+              </p>
+              <p style={{ margin: "8px 0 0", color: "#666", fontSize: "13px" }}>
+                상태: {saveMessage}
               </p>
             </div>
             <input
