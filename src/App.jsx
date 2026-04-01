@@ -97,13 +97,16 @@ const requestNotificationPermission = async () => {
   }
 };
 
-const showReminderNotification = () => {
+const showReminderNotification = (unfinishedCount) => {
+  const body =
+    unfinishedCount > 0
+      ? `아직 ${unfinishedCount}개의 할 일이 남아 있어요.`
+      : "오늘 할 일을 확인할 시간이에요.";
+
   if ("Notification" in window && Notification.permission === "granted") {
-    new Notification("데일리 체크 알림", {
-      body: "오늘 할 일을 확인할 시간이에요.",
-    });
+    new Notification("데일리 체크 알림", { body });
   } else {
-    alert("오늘 할 일을 확인할 시간이에요.");
+    alert(body);
   }
 };
 
@@ -203,7 +206,22 @@ export default function App() {
         nowTime === settings.time &&
         settings.lastTriggeredDate !== todayString
       ) {
-        showReminderNotification();
+        const todayData = history[todayString] || defaultDayData();
+
+        const activeTasksCount = todayData.tasks.filter((task) =>
+          task.text.trim()
+        ).length;
+
+        const completedTasksCount = todayData.tasks.filter(
+          (task) => task.done && task.text.trim()
+        ).length;
+
+        const unfinishedCount = activeTasksCount - completedTasksCount;
+        const hasUnfinishedTasks = unfinishedCount > 0;
+
+        if (!hasUnfinishedTasks) return;
+
+        showReminderNotification(unfinishedCount);
 
         saveReminderSettingsToStorage({
           ...settings,
@@ -213,7 +231,7 @@ export default function App() {
     }, 30000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [history]);
 
   const dayData = history[today] || defaultDayData();
 
