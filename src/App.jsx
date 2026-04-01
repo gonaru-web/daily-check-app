@@ -3,6 +3,7 @@ import { db } from "./firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
 const USER_ID = "default-user";
+const REMINDER_STORAGE_KEY = "daily-check-reminder";
 
 const getToday = () => {
   const d = new Date();
@@ -10,6 +11,21 @@ const getToday = () => {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+};
+
+const getCurrentTime = () => {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+};
+
+const getTodayString = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 };
 
 const defaultDayData = () => ({
@@ -54,11 +70,50 @@ const mergeTomorrowToTasks = (todayData, yesterdayData) => {
   };
 };
 
+const loadReminderSettings = () => {
+  try {
+    const saved = localStorage.getItem(REMINDER_STORAGE_KEY);
+    return saved
+      ? JSON.parse(saved)
+      : { enabled: false, time: "", lastTriggeredDate: "" };
+  } catch {
+    return { enabled: false, time: "", lastTriggeredDate: "" };
+  }
+};
+
+const saveReminderSettingsToStorage = (settings) => {
+  localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(settings));
+};
+
+const requestNotificationPermission = async () => {
+  if (!("Notification" in window)) return;
+
+  if (Notification.permission === "default") {
+    try {
+      await Notification.requestPermission();
+    } catch (error) {
+      console.error("알림 권한 요청 실패:", error);
+    }
+  }
+};
+
+const showReminderNotification = () => {
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("데일리 체크 알림", {
+      body: "오늘 할 일을 확인할 시간이에요.",
+    });
+  } else {
+    alert("오늘 할 일을 확인할 시간이에요.");
+  }
+};
+
 export default function App() {
   const [today, setToday] = useState(getToday());
   const [history, setHistory] = useState({});
   const [loading, setLoading] = useState(true);
   const [saveMessage, setSaveMessage] = useState("불러오는 중...");
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState("");
 
   useEffect(() => {
     const loadData = async () => {
@@ -83,6 +138,13 @@ export default function App() {
     };
 
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const reminder = loadReminderSettings();
+    setReminderEnabled(reminder.enabled);
+    setReminderTime(reminder.time);
+    requestNotificationPermission();
   }, []);
 
   useEffect(() => {
@@ -128,6 +190,31 @@ export default function App() {
     });
   }, [today, loading]);
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const settings = loadReminderSettings();
+
+      if (!settings.enabled || !settings.time) return;
+
+      const nowTime = getCurrentTime();
+      const todayString = getTodayString();
+
+      if (
+        nowTime === settings.time &&
+        settings.lastTriggeredDate !== todayString
+      ) {
+        showReminderNotification();
+
+        saveReminderSettingsToStorage({
+          ...settings,
+          lastTriggeredDate: todayString,
+        });
+      }
+    }, 30000);
+
+    return () => clearInterval(timer);
+  }, []);
+
   const dayData = history[today] || defaultDayData();
 
   const updateDayData = (newData) => {
@@ -161,9 +248,28 @@ export default function App() {
     updateDayData({ ...dayData, gratitude: updated });
   };
 
-  const completedCount = dayData.tasks.filter((task) => task.done && task.text.trim()).length;
+  const saveReminder = async () => {
+    const current = loadReminderSettings();
+
+    const next = {
+      ...current,
+      enabled: reminderEnabled,
+      time: reminderTime,
+    };
+
+    saveReminderSettingsToStorage(next);
+    setSaveMessage("알람 설정 저장됨");
+
+    await requestNotificationPermission();
+  };
+
+  const completedCount = dayData.tasks.filter(
+    (task) => task.done && task.text.trim()
+  ).length;
   const activeTasks = dayData.tasks.filter((task) => task.text.trim()).length;
-  const progress = activeTasks ? Math.round((completedCount / activeTasks) * 100) : 0;
+  const progress = activeTasks
+    ? Math.round((completedCount / activeTasks) * 100)
+    : 0;
 
   const recentDays = useMemo(() => {
     return Object.keys(history)
@@ -243,6 +349,55 @@ export default function App() {
               onChange={(e) => setToday(e.target.value)}
               style={{ ...inputStyle, width: "auto", minWidth: "180px" }}
             />
+          </div>
+
+          <div
+            style={{
+              marginTop: "16px",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "12px",
+              alignItems: "center",
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "14px",
+                color: "#333",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={reminderEnabled}
+                onChange={(e) => setReminderEnabled(e.target.checked)}
+              />
+              알람 사용
+            </label>
+
+            <input
+              type="time"
+              value={reminderTime}
+              onChange={(e) => setReminderTime(e.target.value)}
+              style={{ ...inputStyle, width: "160px" }}
+            />
+
+            <button
+              onClick={saveReminder}
+              style={{
+                border: "none",
+                background: "#222",
+                color: "#fff",
+                borderRadius: "14px",
+                padding: "12px 16px",
+                fontSize: "14px",
+                cursor: "pointer",
+              }}
+            >
+              알람 저장
+            </button>
           </div>
         </div>
 
@@ -356,7 +511,9 @@ export default function App() {
           <h2 style={{ marginTop: 0, fontSize: "20px" }}>최근 기록</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             {recentDays.length === 0 ? (
-              <p style={{ color: "#666", fontSize: "14px", margin: 0 }}>아직 기록이 없어요.</p>
+              <p style={{ color: "#666", fontSize: "14px", margin: 0 }}>
+                아직 기록이 없어요.
+              </p>
             ) : (
               recentDays.map((date) => {
                 const item = history[date];
